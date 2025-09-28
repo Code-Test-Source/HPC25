@@ -1,67 +1,101 @@
- 															//
-
 #include "calGF.h"
+#include <omp.h>
+#include <immintrin.h>
 
 void GravAttraction(const POLYHEDRON &p, double* r, double* F)
 {
     int i, j;
-    double tmp1, tmp2, omegaf, le;
-	double tmpV1[3], tmpV2[3], FF[3] = {0}, EE[3] = {0};
-    double tmpVS[9]; // colum has priority: line29~31 
-  
-    double *RAY = new double[p.NumVerts*4];
     
-    for (i=0; i<p.NumVerts; i++)
-    {  
-		tmpV1[0] = p.Vertices[i];  tmpV1[1] = p.Vertices[i+p.NumVerts];  tmpV1[2] = p.Vertices[i+2*p.NumVerts];
-		tmpV2[0] = tmpV1[0]-r[0];  tmpV2[1] = tmpV1[1]-r[1];             tmpV2[2] = tmpV1[2]-r[2];
-		tmp1 = sqrt(tmpV2[0]*tmpV2[0]+tmpV2[1]*tmpV2[1]+tmpV2[2]*tmpV2[2]);
-		RAY[i] = tmpV2[0];         RAY[i+p.NumVerts] = tmpV2[1];         RAY[i+2*p.NumVerts] = tmpV2[2];        RAY[i+3*p.NumVerts] = tmp1;
-    }
-
-    for (i=0; i<p.NumFaces; i++)
-    {      
-		for (j=0; j<3; j++)
-        {
-           tmpV1[0] = RAY[p.Faces[i+j*p.NumFaces]];  tmpV1[1] = RAY[p.Faces[i+j*p.NumFaces]+p.NumVerts];  tmpV1[2] = RAY[p.Faces[i+j*p.NumFaces]+2*p.NumVerts]; 		   
-		   tmpVS[0+3*j] = tmpV1[0]*(1.0/RAY[p.Faces[i+j*p.NumFaces]+3*p.NumVerts]);
-		   tmpVS[1+3*j] = tmpV1[1]*(1.0/RAY[p.Faces[i+j*p.NumFaces]+3*p.NumVerts]);
-		   tmpVS[2+3*j] = tmpV1[2]*(1.0/RAY[p.Faces[i+j*p.NumFaces]+3*p.NumVerts]); //r[3][3]
-        }	 
-		tmpV2[0] = tmpVS[1+1*3]*tmpVS[2+2*3]-tmpVS[2+1*3]*tmpVS[1+2*3];
-		tmpV2[1] = tmpVS[2+1*3]*tmpVS[2*3]-tmpVS[0+1*3]*tmpVS[2+2*3];
-		tmpV2[2] = tmpVS[0+1*3]*tmpVS[1+2*3]-tmpVS[1+1*3]*tmpVS[2*3];
-		tmp1 = tmpV2[0]*tmpVS[0]+tmpV2[1]*tmpVS[1]+tmpV2[2]*tmpVS[2];
-
-		tmp2 = tmpVS[0]*tmpVS[0+3]+tmpVS[1]*tmpVS[1+3]+tmpVS[2]*tmpVS[2+3]+\
-			   tmpVS[0+3]*tmpVS[0+2*3]+tmpVS[1+3]*tmpVS[1+2*3]+tmpVS[2+3]*tmpVS[2+2*3]+\
-			   tmpVS[0]*tmpVS[0+2*3]+tmpVS[1]*tmpVS[1+2*3]+tmpVS[2]*tmpVS[2+2*3]+1.0;
-
-		omegaf = 2.0*atan2(tmp1, tmp2);
-		tmpV2[0] = p.FaceNormVecs[i];  tmpV2[1] = p.FaceNormVecs[i+p.NumFaces];  tmpV2[2] = p.FaceNormVecs[i+2*p.NumFaces];
-		tmp1 = tmpV1[0]*tmpV2[0]+tmpV1[1]*tmpV2[1]+tmpV1[2]*tmpV2[2];
-		tmpV2[0] *= tmp1*omegaf;  tmpV2[1] *= tmp1*omegaf;  tmpV2[2] *= tmp1*omegaf;
-		FF[0] += tmpV2[0]; FF[1] += tmpV2[1]; FF[2] += tmpV2[2];
-    }
-
-    for (i=0; i<p.NumEdges; i++)
-    {
-        tmp1 = RAY[p.Edges[i]+3*p.NumVerts]+RAY[p.Edges[i+p.NumEdges]+3*p.NumVerts];   //tmp
-		le = log((tmp1+p.EdgeLens[i])/(tmp1-p.EdgeLens[i]));
-		tmpV1[0] = RAY[p.Edges[i]];  tmpV1[1] = RAY[p.Edges[i]+p.NumVerts];  tmpV1[2] = RAY[p.Edges[i]+2*p.NumVerts]; //re        
+    // 初始化结果
+    F[0] = 0.0; F[1] = 0.0; F[2] = 0.0;
+    
+    double *RAY = new double[p.NumVerts * 4];
+    
+    // 预计算射线向量 - 使用向量化
+    #pragma omp parallel for
+    for (i = 0; i < p.NumVerts; i++) {
+        double dx = p.Vertices[i] - r[0];
+        double dy = p.Vertices[i + p.NumVerts] - r[1];
+        double dz = p.Vertices[i + 2 * p.NumVerts] - r[2];
+        double distance = sqrt(dx * dx + dy * dy + dz * dz);
         
-        for (j=0; j<2; j++)
-        {
-			tmpV2[0] = p.EdgeNormVecs[i+(4*j+1)*p.NumEdges];  tmpV2[1] = p.EdgeNormVecs[i+(4*j+2)*p.NumEdges];  tmpV2[2] = p.EdgeNormVecs[i+(4*j+3)*p.NumEdges]; // ne_data(i,3:5)
-			tmp1=tmpV1[0]*tmpV2[0]+tmpV1[1]*tmpV2[1]+tmpV1[2]*tmpV2[2]; //  ne_data(i,3:5)*re'
-			tmpV2[0] = p.FaceNormVecs[(int)p.EdgeNormVecs[i+(4*j)*p.NumEdges]];  tmpV2[1] = p.FaceNormVecs[(int)p.EdgeNormVecs[i+(4*j)*p.NumEdges]+p.NumFaces];  tmpV2[2] = p.FaceNormVecs[(int)p.EdgeNormVecs[i+(4*j)*p.NumEdges]+2*p.NumFaces];//nf_data(ne_data(i,2),2:4)			
-			tmpV2[0] *= tmp1*le; tmpV2[1] *= tmp1*le; tmpV2[2] *= tmp1*le;
-			EE[0] += tmpV2[0]; EE[1] += tmpV2[1]; EE[2] += tmpV2[2];
-        }
+        RAY[i] = dx;
+        RAY[i + p.NumVerts] = dy;
+        RAY[i + 2 * p.NumVerts] = dz;
+        RAY[i + 3 * p.NumVerts] = distance;
     }
-	F[0] = FF[0] - EE[0];
-	F[1] = FF[1] - EE[1];
-	F[2] = FF[2] - EE[2];
 
-	delete[] RAY;   RAY = NULL;
+    double FF[3] = {0.0, 0.0, 0.0};
+    double EE[3] = {0.0, 0.0, 0.0};
+    
+    // 并行处理面
+    #pragma omp parallel for reduction(+:FF[0], FF[1], FF[2])
+    for (i = 0; i < p.NumFaces; i++) {
+        double tmpVS[9]; // 3x3矩阵
+        double tmpV1[3], tmpV2[3];
+        double face_FF[3] = {0.0, 0.0, 0.0};
+        
+        for (j = 0; j < 3; j++) {
+            int vert_idx = p.Faces[i + j * p.NumFaces];
+            double inv_dist = 1.0 / RAY[vert_idx + 3 * p.NumVerts];
+            
+            tmpVS[0 + 3 * j] = RAY[vert_idx] * inv_dist;
+            tmpVS[1 + 3 * j] = RAY[vert_idx + p.NumVerts] * inv_dist;
+            tmpVS[2 + 3 * j] = RAY[vert_idx + 2 * p.NumVerts] * inv_dist;
+        }
+        
+        // 计算叉积
+        tmpV2[0] = tmpVS[1 + 1*3] * tmpVS[2 + 2*3] - tmpVS[2 + 1*3] * tmpVS[1 + 2*3];
+        tmpV2[1] = tmpVS[2 + 1*3] * tmpVS[0 + 2*3] - tmpVS[0 + 1*3] * tmpVS[2 + 2*3];
+        tmpV2[2] = tmpVS[0 + 1*3] * tmpVS[1 + 2*3] - tmpVS[1 + 1*3] * tmpVS[0 + 2*3];
+        
+        double tmp1 = tmpV2[0] * tmpVS[0] + tmpV2[1] * tmpVS[1] + tmpV2[2] * tmpVS[2];
+        double tmp2 = tmpVS[0] * tmpVS[0+3] + tmpVS[1] * tmpVS[1+3] + tmpVS[2] * tmpVS[2+3] +
+                     tmpVS[0+3] * tmpVS[0+2*3] + tmpVS[1+3] * tmpVS[1+2*3] + tmpVS[2+3] * tmpVS[2+2*3] +
+                     tmpVS[0] * tmpVS[0+2*3] + tmpVS[1] * tmpVS[1+2*3] + tmpVS[2] * tmpVS[2+2*3] + 1.0;
+        
+        double omegaf = 2.0 * atan2(tmp1, tmp2);
+        
+        // 使用第一个顶点计算
+        int first_vert = p.Faces[i];
+        double dot_product = RAY[first_vert] * p.FaceNormVecs[i] +
+                           RAY[first_vert + p.NumVerts] * p.FaceNormVecs[i + p.NumFaces] +
+                           RAY[first_vert + 2 * p.NumVerts] * p.FaceNormVecs[i + 2 * p.NumFaces];
+        
+        face_FF[0] = p.FaceNormVecs[i] * dot_product * omegaf;
+        face_FF[1] = p.FaceNormVecs[i + p.NumFaces] * dot_product * omegaf;
+        face_FF[2] = p.FaceNormVecs[i + 2 * p.NumFaces] * dot_product * omegaf;
+        
+        FF[0] += face_FF[0]; FF[1] += face_FF[1]; FF[2] += face_FF[2];
+    }
+    
+    // 并行处理边
+    #pragma omp parallel for reduction(+:EE[0], EE[1], EE[2])
+    for (i = 0; i < p.NumEdges; i++) {
+        double edge_EE[3] = {0.0, 0.0, 0.0};
+        
+        double tmp1 = RAY[p.Edges[i] + 3 * p.NumVerts] + RAY[p.Edges[i + p.NumEdges] + 3 * p.NumVerts];
+        double le = log((tmp1 + p.EdgeLens[i]) / (tmp1 - p.EdgeLens[i]));
+        
+        double re_dot[2];
+        for (j = 0; j < 2; j++) {
+            int edge_vert = p.Edges[i + j * p.NumEdges];
+            re_dot[j] = RAY[edge_vert] * p.EdgeNormVecs[i + (4*j+1) * p.NumEdges] +
+                       RAY[edge_vert + p.NumVerts] * p.EdgeNormVecs[i + (4*j+2) * p.NumEdges] +
+                       RAY[edge_vert + 2 * p.NumVerts] * p.EdgeNormVecs[i + (4*j+3) * p.NumEdges];
+            
+            int face_idx = (int)p.EdgeNormVecs[i + (4*j) * p.NumEdges];
+            edge_EE[0] += p.FaceNormVecs[face_idx] * re_dot[j] * le;
+            edge_EE[1] += p.FaceNormVecs[face_idx + p.NumFaces] * re_dot[j] * le;
+            edge_EE[2] += p.FaceNormVecs[face_idx + 2 * p.NumFaces] * re_dot[j] * le;
+        }
+        
+        EE[0] += edge_EE[0]; EE[1] += edge_EE[1]; EE[2] += edge_EE[2];
+    }
+    
+    F[0] = FF[0] - EE[0];
+    F[1] = FF[1] - EE[1];
+    F[2] = FF[2] - EE[2];
+    
+    delete[] RAY;
 }
