@@ -9,20 +9,20 @@
 - 'e4:43:4b:0c:d2:a6' # 两个一组使用冒号分隔，大小写自选
 - '172.16.32.208'
 5:
-- '3C59A625C8FBA1EA38BFA9BCF171FAD0FCD285EC9B0FDBC8B2E5BEEC51B88FEA'
+- '77C16091BE3299EE9E0130F8D692C0B32C4099DEBF25E45901557C8F1D617A3D8BEF61B1FECD7A7875C81613F8644FE6E1AE6811301A9719C13D2F9211E84EAD'
 6:
 - '202.120.35.152'
 - '2001:da8:8000:6181:202:120:35:152'
 7:
 - '/lustre/opt/linux-openeuler22-aarch64/linux-openeuler22-aarch64/contribute/bisheng/BiSheng-compiler-2.5.0-aarch64-linux/bin/clang++'
 8:
-- '40'
+- '40.45.1200'
 9:
 - 1
-- 'A800'
+- 'gpu05'
 10:
 - 'Intel Math Kernel Library'
 11:
 - 2
 - 4
-- 10,12,20,22
+- 22,24,12,10
