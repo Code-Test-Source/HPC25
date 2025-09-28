@@ -1,0 +1,70 @@
+#!/bin/bash
+
+set -e  # 遇到错误立即退出
+
+echo "Starting WRF run on $(date)"
+
+# 设置工作目录
+WORK_DIR=$(pwd)
+INSTALL_DIR="$WORK_DIR/local"
+CONUS_DIR="$WORK_DIR/conus12km"
+
+# 设置环境变量
+export PATH="$INSTALL_DIR/bin:$PATH"
+export LD_LIBRARY_PATH="$INSTALL_DIR/lib:$LD_LIBRARY_PATH"
+export NETCDF="$INSTALL_DIR"
+export PNETCDF="$INSTALL_DIR"
+export HDF5="$INSTALL_DIR"
+
+# 解压测试用例
+echo "Setting up test case..."
+cd "$CONUS_DIR"
+if [ ! -d "conus12km" ]; then
+    tar -xzf conus12km.tar.gz
+fi
+
+cd conus12km
+
+# 链接WRF可执行文件
+ln -sf "$WORK_DIR/real.exe" .
+ln -sf "$WORK_DIR/wrf.exe" .
+
+# 运行real.exe生成初始和边界条件
+echo "Running real.exe..."
+./real.exe > real.log 2>&1
+
+if [ $? -ne 0 ]; then
+    echo "Error: real.exe failed"
+    echo "real.exe log:"
+    tail -50 real.log
+    exit 1
+fi
+
+echo "real.exe completed successfully"
+
+# 运行wrf.exe进行模拟
+echo "Running wrf.exe..."
+./wrf.exe > wrf.log 2>&1
+
+if [ $? -ne 0 ]; then
+    echo "Error: wrf.exe failed"
+    echo "wrf.exe log:"
+    tail -50 wrf.log
+    exit 1
+fi
+
+echo "wrf.exe completed successfully"
+
+# 检查输出文件
+if [ ! -f "rsl.out.0000" ]; then
+    echo "Error: rsl.out.0000 not found"
+    exit 1
+fi
+
+echo "WRF run completed successfully on $(date)"
+
+# 显示部分输出日志
+echo "First 20 lines of rsl.out.0000:"
+head -20 rsl.out.0000
+
+echo "WRF simulation completed successfully!"

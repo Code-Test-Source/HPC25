@@ -1,0 +1,128 @@
+#!/bin/bash
+
+set -e  # 遇到错误立即退出
+
+echo "Starting WRF compilation on $(date)"
+
+# 设置工作目录
+WORK_DIR=$(pwd)
+DEPS_DIR="$WORK_DIR/dependencies"
+INSTALL_DIR="$WORK_DIR/local"
+CONUS_DIR="$WORK_DIR/conus12km"
+
+# 创建安装目录
+mkdir -p "$INSTALL_DIR"
+mkdir -p "$CONUS_DIR"
+
+# 设置环境变量
+export CC=mpicc
+export CXX=mpicxx
+export FC=mpif90
+export F77=mpif77
+export F90=mpif90
+export CFLAGS="-O3 -march=native"
+export FFLAGS="-O3 -march=native"
+export FCFLAGS="-O3 -march=native"
+export CPPFLAGS="-I$INSTALL_DIR/include"
+export LDFLAGS="-L$INSTALL_DIR/lib"
+export LD_LIBRARY_PATH="$INSTALL_DIR/lib:$LD_LIBRARY_PATH"
+export PATH="$INSTALL_DIR/bin:$PATH"
+
+# 设置并行编译
+export MAKEFLAGS="-j$(nproc)"
+
+echo "Environment setup completed"
+
+# 函数：检查命令执行状态
+check_status() {
+    if [ $? -ne 0 ]; then
+        echo "Error: $1 failed"
+        exit 1
+    fi
+    echo "$1 completed successfully"
+}
+
+# 1. 编译zlib
+echo "Compiling zlib..."
+cd "$DEPS_DIR"
+tar -xzf zlib-1.2.11.tar.gz
+cd zlib-1.2.11
+./configure --prefix="$INSTALL_DIR"
+make && make install
+check_status "zlib compilation"
+
+# 2. 编译HDF5
+echo "Compiling HDF5..."
+cd "$DEPS_DIR"
+tar -xf hdf5-1.10.1.tar
+cd hdf5-1.10.1
+./configure --prefix="$INSTALL_DIR" --enable-parallel --enable-fortran --with-zlib="$INSTALL_DIR"
+make && make install
+check_status "HDF5 compilation"
+
+# 3. 编译NetCDF-C
+echo "Compiling NetCDF-C..."
+cd "$DEPS_DIR"
+tar -xzf netcdf-c-4.4.1.1.tar.gz
+cd netcdf-c-4.4.1.1
+./configure --prefix="$INSTALL_DIR" --enable-parallel-tests --enable-shared --disable-dap
+make && make install
+check_status "NetCDF-C compilation"
+
+# 4. 编译NetCDF-Fortran
+echo "Compiling NetCDF-Fortran..."
+cd "$DEPS_DIR"
+tar -xzf netcdf-fortran-4.4.1.tar.gz
+cd netcdf-fortran-4.4.1
+export CPPFLAGS="-I$INSTALL_DIR/include $CPPFLAGS"
+export LDFLAGS="-L$INSTALL_DIR/lib $LDFLAGS"
+./configure --prefix="$INSTALL_DIR"
+make && make install
+check_status "NetCDF-Fortran compilation"
+
+# 5. 编译PNetCDF
+echo "Compiling PNetCDF..."
+cd "$DEPS_DIR"
+tar -xzf parallel-netcdf-1.9.0.tar.gz
+cd parallel-netcdf-1.9.0
+./configure --prefix="$INSTALL_DIR"
+make && make install
+check_status "PNetCDF compilation"
+
+# 6. 编译WRF
+echo "Compiling WRF..."
+cd "$WORK_DIR"
+tar -xzf WRF-4.2.tar.gz
+cd WRF-4.2
+
+# 设置WRF环境
+export NETCDF="$INSTALL_DIR"
+export PNETCDF="$INSTALL_DIR"
+export HDF5="$INSTALL_DIR"
+export PHDF5="$INSTALL_DIR"
+export WRFIO_NCD_LARGE_FILE_SUPPORT=1
+
+# 配置WRF - 选择选项34 (GNU gfortran/gcc with OpenMPI)
+echo -e "34\n1" | ./configure
+check_status "WRF configuration"
+
+# 编译WRF
+./compile em_real >& compile.log
+check_status "WRF compilation"
+
+# 检查主要可执行文件是否生成
+if [ ! -f "main/real.exe" ] || [ ! -f "main/wrf.exe" ]; then
+    echo "Error: WRF executables not found"
+    echo "Compilation log:"
+    tail -50 compile.log
+    exit 1
+fi
+
+echo "WRF compilation completed successfully on $(date)"
+
+# 创建符号链接到主目录
+cd "$WORK_DIR"
+ln -sf WRF-4.2/main/real.exe .
+ln -sf WRF-4.2/main/wrf.exe .
+
+echo "All compilation steps completed successfully!"
