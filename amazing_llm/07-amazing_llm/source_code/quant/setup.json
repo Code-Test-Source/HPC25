@@ -1,0 +1,12 @@
+{
+    "extension_name": "_C",
+    "src": [
+        "csrc/q6bit.cpp"
+    ],
+    "compile_args": [
+        "-O3",
+        "-mavx2",
+        "-mfma",
+        "-fopenmp"
+    ]
+}
